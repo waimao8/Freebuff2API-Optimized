@@ -412,6 +412,13 @@ async def test_chat(request: Request) -> dict[str, Any]:
     env = config_manager.load_env()
     port = int(env.get("FREEBUFF_PORT", "8000"))
     api_key = env.get("FREEBUFF_API_KEY", "")
+    # fallback to first enabled key in api_keys.json
+    if not api_key:
+        keys = _load_api_keys()
+        for k in keys:
+            if k.get("enabled", True):
+                api_key = k.get("key", "")
+                break
     url = f"http://127.0.0.1:{port}/v1/chat/completions"
 
     headers = {"Content-Type": "application/json"}
