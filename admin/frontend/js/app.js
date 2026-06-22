@@ -863,9 +863,42 @@ const app = createApp({
               <input v-model="settingsForm.FREEBUFF_AD_PROVIDERS" class="input" />
               <div class="form-hint">英文逗号分隔，默认 gravity,zeroclick</div>
             </div>
+          </div>
+          <div class="form-row">
             <div class="form-group">
               <label>超时时间 (秒)</label>
               <input v-model="settingsForm.FREEBUFF_TIMEOUT" type="number" class="input" />
+            </div>
+            <div class="form-group">
+              <label>日志级别</label>
+              <select v-model="settingsForm.FREEBUFF_LOG_LEVEL" class="input">
+                <option>DEBUG</option>
+                <option>INFO</option>
+                <option>WARNING</option>
+                <option>ERROR</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>日志打印字符数</label>
+              <input v-model="settingsForm.FREEBUFF_LOG_BODY_CHARS" type="number" class="input" />
+              <div class="form-hint">0 表示不截断</div>
+            </div>
+            <div class="form-group">
+              <label>时区</label>
+              <input v-model="settingsForm.FREEBUFF_TIMEZONE" class="input" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>语言区域</label>
+              <input v-model="settingsForm.FREEBUFF_LOCALE" class="input" />
+            </div>
+            <div class="form-group">
+              <label>操作系统</label>
+              <input v-model="settingsForm.FREEBUFF_OS" class="input" />
+              <div class="form-hint">模拟客户端设备信息</div>
             </div>
           </div>
           <div class="form-row">
@@ -880,47 +913,17 @@ const app = createApp({
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>日志级别</label>
-              <select v-model="settingsForm.FREEBUFF_LOG_LEVEL" class="input">
-                <option>DEBUG</option>
-                <option>INFO</option>
-                <option>WARNING</option>
-                <option>ERROR</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>日志打印字符数</label>
-              <input v-model="settingsForm.FREEBUFF_LOG_BODY_CHARS" type="number" class="input" />
-              <div class="form-hint">0 表示不截断</div>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>时区</label>
-              <input v-model="settingsForm.FREEBUFF_TIMEZONE" class="input" />
-            </div>
-            <div class="form-group">
-              <label>语言区域</label>
-              <input v-model="settingsForm.FREEBUFF_LOCALE" class="input" />
-            </div>
-            <div class="form-group">
-              <label>操作系统</label>
-              <input v-model="settingsForm.FREEBUFF_OS" class="input" />
-              <div class="form-hint">模拟客户端设备信息</div>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <label>代理设置</label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px">
                 <input v-model="settingsForm.FREEBUFF_PROXY_ENABLED" type="checkbox" />
                 <span>启用上游代理</span>
               </label>
             </div>
-            <div class="form-group" v-if="settingsForm.FREEBUFF_PROXY_ENABLED">
+            <div class="form-group" :style="!settingsForm.FREEBUFF_PROXY_ENABLED ? 'opacity:0.4' : ''">
               <label>代理地址</label>
-              <input v-model="settingsForm.FREEBUFF_PROXY_URL" class="input" placeholder="http://127.0.0.1:7890 或 socks5://..." />
+              <input v-model="settingsForm.FREEBUFF_PROXY_URL" class="input" :disabled="!settingsForm.FREEBUFF_PROXY_ENABLED" placeholder="http://127.0.0.1:7890 或 socks5://..." />
               <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
-                <button class="btn" :disabled="proxyTesting" @click="testProxy">
+                <button class="btn" :disabled="proxyTesting || !settingsForm.FREEBUFF_PROXY_ENABLED" @click="testProxy">
                   <span v-if="proxyTesting" class="spinner"></span>
                   <span v-else>测试代理</span>
                 </button>
@@ -931,14 +934,16 @@ const app = createApp({
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <label>调试模式</label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px">
                 <input v-model="settingsForm.FREEBUFF_DEBUG" type="checkbox" />
                 <span>调试模式</span>
               </label>
               <div class="form-hint">开启后输出上游请求/响应详情</div>
             </div>
             <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <label>日志样式</label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px">
                 <input v-model="settingsForm.FREEBUFF_LOG_COLOR" type="checkbox" />
                 <span>彩色日志</span>
               </label>
