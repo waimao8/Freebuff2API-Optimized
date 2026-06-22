@@ -57,7 +57,6 @@ def save_env(data: dict[str, str]) -> None:
     # write known keys in logical order
     order = [
         "FREEBUFF_TOKEN",
-        "FREEBUFF_API_KEY",
         "FREEBUFF_API_BASE_URL",
         "FREEBUFF_AD_PROVIDERS",
         "FREEBUFF_TIMEOUT",

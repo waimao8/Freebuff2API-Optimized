@@ -50,7 +50,6 @@ const app = createApp({
     // ========== Settings ==========
     const settingsForm = reactive({
       FREEBUFF_TOKEN: '',
-      FREEBUFF_API_KEY: '',
       FREEBUFF_API_BASE_URL: 'https://www.codebuff.com',
       FREEBUFF_AD_PROVIDERS: 'gravity,zeroclick',
       FREEBUFF_TIMEOUT: '60',
@@ -381,7 +380,6 @@ const app = createApp({
         const data = await request('/api/config');
         const env = data.env || {};
         settingsForm.FREEBUFF_TOKEN = env.FREEBUFF_TOKEN || '';
-        settingsForm.FREEBUFF_API_KEY = env.FREEBUFF_API_KEY || '';
         settingsForm.FREEBUFF_API_BASE_URL = env.FREEBUFF_API_BASE_URL || 'https://www.codebuff.com';
         settingsForm.FREEBUFF_AD_PROVIDERS = env.FREEBUFF_AD_PROVIDERS || 'gravity,zeroclick';
         settingsForm.FREEBUFF_TIMEOUT = env.FREEBUFF_TIMEOUT || '60';
@@ -412,7 +410,6 @@ const app = createApp({
       try {
         const env = {
           FREEBUFF_TOKEN: settingsForm.FREEBUFF_TOKEN,
-          FREEBUFF_API_KEY: settingsForm.FREEBUFF_API_KEY,
           FREEBUFF_API_BASE_URL: settingsForm.FREEBUFF_API_BASE_URL,
           FREEBUFF_AD_PROVIDERS: settingsForm.FREEBUFF_AD_PROVIDERS,
           FREEBUFF_TIMEOUT: String(settingsForm.FREEBUFF_TIMEOUT),
@@ -858,16 +855,9 @@ const app = createApp({
         <div class="table-wrap" style="padding:24px">
           <div class="form-row">
             <div class="form-group">
-              <label>本地 API Key</label>
-              <input v-model="settingsForm.FREEBUFF_API_KEY" class="input" placeholder="留空则不校验 Authorization" />
-              <div class="form-hint">调用本地 /v1 接口时的 Bearer token</div>
-            </div>
-            <div class="form-group">
               <label>上游 API 根地址</label>
               <input v-model="settingsForm.FREEBUFF_API_BASE_URL" class="input" />
             </div>
-          </div>
-          <div class="form-row">
             <div class="form-group">
               <label>广告 Provider</label>
               <input v-model="settingsForm.FREEBUFF_AD_PROVIDERS" class="input" />
