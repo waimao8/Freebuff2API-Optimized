@@ -50,6 +50,7 @@ def normalize_chat_messages(messages: Any) -> list[dict[str, Any]]:
         if not isinstance(message, dict):
             continue
         item = dict(message)
+        item.pop("timestamp", None)
         if item.get("role") == "developer":
             item["role"] = "system"
         if item.get("role") == "system":
