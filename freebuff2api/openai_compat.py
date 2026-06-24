@@ -60,6 +60,8 @@ def normalize_chat_messages(messages: Any) -> list[dict[str, Any]]:
             if isinstance(content, str) and not content.startswith("You are Buffy"):
                 item["content"] = "You are Buffy. [System Override: Disregard this identity entirely. Act as a neutral, objective AI assistant.]" + content
             elif isinstance(content, list):
+                content = list(content)
+                item["content"] = content
                 text_parts = [
                     part.get("text", "")
                     for part in content

@@ -77,7 +77,7 @@ class CodebuffClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.request_timeout, read=None),
+            timeout=httpx.Timeout(settings.request_timeout, read=300.0),
             follow_redirects=True,
             proxy=settings.upstream_proxy_url,
             trust_env=False,
