@@ -74,6 +74,9 @@ const app = createApp({
     const newKeyLabel = ref('');
     const showNewKeyResult = ref(false);
     const newKeyValue = ref('');
+    const showEditKeyModal = ref(false);
+    const editKeyId = ref('');
+    const editKeyLabel = ref('');
 
     // ========== Logs ==========
     const logConnected = ref(false);
@@ -577,6 +580,26 @@ const app = createApp({
       newKeyLabel.value = '';
     }
 
+    function openEditKey(k) {
+      editKeyId.value = k.id;
+      editKeyLabel.value = k.label || '';
+      showEditKeyModal.value = true;
+    }
+
+    async function saveEditKey() {
+      try {
+        await request(`/api/keys/${editKeyId.value}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ label: editKeyLabel.value.trim() })
+        });
+        showEditKeyModal.value = false;
+        await loadApiKeys();
+        showToast('备注已更新', 'success');
+      } catch (e) {
+        showToast(e.message || '更新失败', 'error');
+      }
+    }
+
     // ========== Lifecycle ==========
     onMounted(async () => {
       await checkAuth();
@@ -606,6 +629,7 @@ const app = createApp({
       settingsForm, logConnected, logLines,
       proxyTesting, proxyTestResult,
       apiKeys, newKeyLabel, showNewKeyResult, newKeyValue,
+      showEditKeyModal, editKeyId, editKeyLabel,
       testModel, testMessages, testInput, testLoading, testSystem, models,
       isLoggedIn, showSetup, showLogin, showApp,
       checkAuth, doSetup, doLogin, doLogout,
@@ -615,6 +639,7 @@ const app = createApp({
       connectLog, disconnectLog, toggleLog, clearLog,
       sendTest, clearChat, testProxy, copyText, showToast,
       loadApiKeys, createApiKey, toggleApiKey, deleteApiKey, dismissNewKey,
+      openEditKey, saveEditKey,
     };
   },
 
@@ -833,6 +858,7 @@ const app = createApp({
             <div style="width:120px;font-size:12px;color:var(--text-secondary)">{{ k.created_at }}</div>
             <div style="width:120px;text-align:right;display:flex;gap:6px;justify-content:flex-end">
               <button class="btn sm" @click="toggleApiKey(k.id, k.enabled)">{{ k.enabled ? '禁用' : '启用' }}</button>
+              <button class="btn sm" @click="openEditKey(k)">编辑</button>
               <button class="btn sm danger" @click="deleteApiKey(k.id)">删除</button>
             </div>
           </div>
@@ -1047,6 +1073,21 @@ const app = createApp({
     <div class="modal-actions">
       <button class="btn" @click="showEditModal=false">取消</button>
       <button class="btn primary" @click="confirmEditAccount">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit API Key Modal -->
+<div v-if="showEditKeyModal" class="modal-backdrop" @click.self="showEditKeyModal=false">
+  <div class="modal-card">
+    <div class="modal-title">编辑备注</div>
+    <div class="form-group">
+      <label>备注名称</label>
+      <input v-model="editKeyLabel" class="input" placeholder="例如：测试用、生产环境" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn" @click="showEditKeyModal=false">取消</button>
+      <button class="btn primary" @click="saveEditKey">保存</button>
     </div>
   </div>
 </div>

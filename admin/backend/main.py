@@ -398,7 +398,10 @@ async def api_keys_toggle(request: Request, key_id: str) -> dict[str, Any]:
     keys = _load_api_keys()
     for k in keys:
         if k.get("id") == key_id:
-            k["enabled"] = body.get("enabled", not k.get("enabled", True))
+            if "enabled" in body:
+                k["enabled"] = body.get("enabled", not k.get("enabled", True))
+            if "label" in body:
+                k["label"] = body["label"]
             break
     _save_api_keys(keys)
     return {"ok": True}
