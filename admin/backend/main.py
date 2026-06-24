@@ -349,22 +349,16 @@ import uuid
 async def api_keys_list(request: Request) -> dict[str, Any]:
     await require_auth(request)
     keys = _load_api_keys()
-    # mask key values (only show first 8 and last 4 chars)
-    masked = []
+    result = []
     for k in keys:
-        key_val = k.get("key", "")
-        if len(key_val) > 16:
-            masked_key = key_val[:8] + "***" + key_val[-4:]
-        else:
-            masked_key = key_val[:4] + "***"
-        masked.append({
+        result.append({
             "id": k.get("id"),
-            "key": masked_key,
+            "key": k.get("key", ""),
             "enabled": k.get("enabled", True),
             "label": k.get("label", ""),
             "created_at": k.get("created_at", ""),
         })
-    return {"keys": masked}
+    return {"keys": result}
 
 @app.post("/api/keys")
 async def api_keys_create(request: Request) -> dict[str, Any]:
