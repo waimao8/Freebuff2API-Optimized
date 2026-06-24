@@ -13,20 +13,30 @@ const app = createApp({
 
     // ========== UI ==========
     const savedPage = sessionStorage.getItem('fba_page');
-    const page = ref(savedPage && ['dashboard','accounts','keys','settings','logs','test'].includes(savedPage) ? savedPage : 'dashboard');
+    const page = ref(savedPage && ['dashboard','accounts','keys','settings','logs','stats','test'].includes(savedPage) ? savedPage : 'dashboard');
     const collapsed = ref(false);
     const toasts = reactive([]);
     const loading = ref(false);
     const saveLoading = ref(false);
     const ctlLoading = ref(false);
+    const statsActive = ref(false);
 
+    const svgIcons = {
+      dashboard: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+      accounts: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="17" cy="7" r="3"/><path d="M22 21v-2a4 4 0 00-3-3.87"/></svg>',
+      keys: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M10.7 19.3L19 11l2.8 2.8-8.3 8.3z"/><path d="M18 12l-4-4"/></svg>',
+      settings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
+      logs: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+      test: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z"/></svg>',
+    };
     const navItems = [
-      { key: 'dashboard', label: '数据概览', icon: '◆' },
-      { key: 'accounts', label: '账号管理', icon: '👤' },
+      { key: 'dashboard', label: '数据概览', icon: '📊' },
+      { key: 'accounts', label: '账号管理', icon: '👥' },
       { key: 'keys', label: 'API Key', icon: '🔑' },
       { key: 'settings', label: '系统设置', icon: '⚙️' },
-      { key: 'logs', label: '实时日志', icon: '▣' },
-      { key: 'test', label: 'API 测试', icon: '▶' },
+      { key: 'logs', label: '实时日志', icon: '📜' },
+      { key: 'stats', label: '轮询统计', icon: '🔄' },
+      { key: 'test', label: 'API 测试', icon: '🧪' },
     ];
 
     // ========== Status & Data ==========
@@ -649,7 +659,8 @@ const app = createApp({
       }
     });
 
-    onUnmounted(() => { disconnectLog(); });
+    let statsTimer = null;
+    onUnmounted(() => { disconnectLog(); if (statsTimer) clearInterval(statsTimer); });
 
     watch(page, (p) => {
       sessionStorage.setItem('fba_page', p);
@@ -657,12 +668,21 @@ const app = createApp({
       if (p === 'accounts') loadAccounts();
       if (p === 'keys') loadApiKeys();
       if (p === 'settings') loadSettings();
+      if (p === 'stats') {
+        loadStatus();
+        if (statsTimer) clearInterval(statsTimer);
+        statsActive.value = true;
+        statsTimer = setInterval(() => loadStatus(), 5000);
+      } else {
+        statsActive.value = false;
+        if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+      }
       if (p !== 'logs') disconnectLog();
     });
 
     return {
       token, initialized, checking, loginPassword, setupPassword, confirmPassword, authLoading,
-      page, collapsed, toasts, loading, saveLoading, ctlLoading, navItems,
+      page, collapsed, toasts, loading, saveLoading, ctlLoading, statsActive, navItems,
       statusData, accounts, showAddModal, newAccountToken, newAccountLabel,
       showEditModal, editAccountIdx, editAccountToken, editAccountLabel,
       settingsForm, logConnected, logLines,
@@ -733,8 +753,8 @@ const app = createApp({
       <span class="text">Freebuff2API</span>
     </div>
     <div class="sider-menu">
-      <div v-for="item in navItems" :key="item.key" class="menu-item" :class="{active: page===item.key}" @click="page=item.key">
-        <span class="icon">{{item.icon}}</span>
+      <div v-for="item in navItems" :key="item.key" class="menu-item" :class="{active: page===item.key}" :data-tooltip="item.label" @click="page=item.key">
+        <span class="icon" v-html="item.icon"></span>
         <span class="label">{{item.label}}</span>
       </div>
     </div>
@@ -747,7 +767,11 @@ const app = createApp({
   <div class="main">
     <div class="header">
       <div class="header-left">
-        <span class="text-secondary">{{ navItems.find(n=>n.key===page)?.label }}</span>
+        <div class="breadcrumb">
+          <span>Freebuff2API</span>
+          <span style="margin:0 6px;opacity:0.4">›</span>
+          <span style="color:var(--text);font-weight:500">{{ navItems.find(n=>n.key===page)?.label }}</span>
+        </div>
       </div>
       <div class="header-right">
         <span v-if="statusData.service.active" class="tag tag-success">● {{ statusData.service.name }} 运行中</span>
@@ -759,6 +783,18 @@ const app = createApp({
     <div class="content">
       <!-- Dashboard -->
       <div v-if="page==='dashboard'">
+        <!-- Hero Banner -->
+        <div class="hero-banner">
+          <div class="hero-left">
+            <div class="hero-subtitle">Freebuff2API 代理服务 · 数据概览</div>
+            <div class="hero-title">系统运行状态</div>
+          </div>
+          <div class="hero-right">
+            <div class="hero-stat"><div class="hero-stat-label">请求量</div><div class="hero-stat-value">{{ statusData.stats?.total_requests || 0 }}</div></div>
+            <div class="hero-stat"><div class="hero-stat-label">账号数</div><div class="hero-stat-value">{{ statusData.accounts.count }}</div></div>
+          </div>
+        </div>
+
         <div class="page-header">
           <div class="page-title">数据概览</div>
           <div class="actions">
@@ -769,58 +805,31 @@ const app = createApp({
         </div>
         <div class="card-grid">
           <div class="stat-card">
-            <div class="stat-label">服务状态</div>
             <div class="stat-value" :style="{color: statusData.service.active ? 'var(--success)' : 'var(--danger)'}">{{ statusData.service.active ? '运行中' : '已停止' }}</div>
+            <div class="stat-label">服务状态</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">账号数量</div>
             <div class="stat-value">{{ statusData.accounts.count }}</div>
+            <div class="stat-label">账号数量</div>
           </div>
           <div class="stat-card">
+            <div class="stat-value">{{ statusData.api_keys?.enabled_count || 0 }} <span class="stat-suffix">/ {{ statusData.api_keys?.count || 0 }}</span></div>
             <div class="stat-label">API Key</div>
-            <div class="stat-value">{{ statusData.api_keys?.enabled_count || 0 }} <span style="font-size:12px;color:var(--text-secondary)">/ {{ statusData.api_keys?.count || 0 }}</span></div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">运行时长</div>
             <div class="stat-value" style="font-size:18px">{{ statusData.service.uptime }}</div>
+            <div class="stat-label">运行时长</div>
           </div>
         </div>
         <div class="page-title" style="margin-top:24px">配置摘要</div>
         <div class="table-wrap">
-          <div class="table-row"><div style="width:180px;color:var(--text-secondary)">API 地址</div><div>{{ statusData.config.api_address }}</div></div>
+          <div class="table-row"><div style="width:180px;color:var(--text-secondary)">API 地址</div><div style="display:flex;align-items:center;gap:8px"><code>{{ statusData.config.api_address }}</code><button class="btn xs" @click="copyText(statusData.config.api_address)" title="复制" style="padding:2px 6px">📋</button></div></div>
           <div class="table-row"><div style="width:180px;color:var(--text-secondary)">监听地址</div><div>{{ statusData.config.host }}:{{ statusData.config.port }}</div></div>
           <div class="table-row"><div style="width:180px;color:var(--text-secondary)">日志级别</div><div>{{ statusData.config.log_level }}</div></div>
           <div class="table-row"><div style="width:180px;color:var(--text-secondary)">代理</div><div>{{ statusData.config.proxy_enabled ? '已开启' : '已关闭' }}</div></div>
           <div class="table-row"><div style="width:180px;color:var(--text-secondary)">调试模式</div><div>{{ statusData.config.debug ? '已开启' : '已关闭' }}</div></div>
         </div>
 
-        <!-- Account stats -->
-        <div v-if="statusData.account_stats" style="margin-top:24px">
-          <div class="page-title">账号轮询统计</div>
-          <div class="table-wrap">
-            <div class="table-header">
-              <div style="width:60px">#</div>
-              <div style="width:100px">状态</div>
-              <div style="width:100px">使用次数</div>
-              <div style="flex:1">最近模型</div>
-              <div style="width:160px">最近使用</div>
-            </div>
-            <div v-for="(st, idx) in statusData.account_stats.accounts" :key="idx" class="table-row">
-              <div style="width:60px">{{ idx + 1 }}</div>
-              <div style="width:100px">
-                <span v-if="st.busy" class="tag tag-warning">● 处理中</span>
-                <span v-else-if="st.use_count > 0" class="tag tag-success">空闲</span>
-                <span v-else class="tag" style="background:#f5f5f5;border-color:#d9d9d9;color:var(--text-secondary)">未使用</span>
-              </div>
-              <div style="width:100px">{{ st.use_count }}</div>
-              <div style="flex:1;font-family:monospace;font-size:12px">{{ st.last_model || '-' }}</div>
-              <div style="width:160px;font-size:12px;color:var(--text-secondary)">
-                <span v-if="st.last_used_at">{{ new Date(st.last_used_at * 1000).toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'}) }}</span>
-                <span v-else>-</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Accounts -->
@@ -839,7 +848,7 @@ const app = createApp({
           <div class="table-header">
             <div style="width:80px">ID</div>
             <div style="flex:1">账号名称</div>
-            <div style="flex:2">净值</div>
+            <div style="flex:2">Token</div>
             <div style="width:120px;text-align:right">操作</div>
           </div>
           <div v-for="(acc, idx) in accounts" :key="idx" class="table-row">
@@ -995,7 +1004,7 @@ const app = createApp({
               <label>代理地址</label>
               <input v-model="settingsForm.FREEBUFF_PROXY_URL" class="input" :disabled="!settingsForm.FREEBUFF_PROXY_ENABLED" placeholder="http://127.0.0.1:7890 或 socks5://..." />
               <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
-                <button class="btn" :disabled="proxyTesting || !settingsForm.FREEBUFF_PROXY_ENABLED" @click="testProxy">
+                <button class="btn sm" :disabled="proxyTesting || !settingsForm.FREEBUFF_PROXY_ENABLED" @click="testProxy">
                   <span v-if="proxyTesting" class="spinner"></span>
                   <span v-else>测试代理</span>
                 </button>
@@ -1039,6 +1048,41 @@ const app = createApp({
         </div>
       </div>
 
+      <!-- Stats -->
+      <div v-if="page==='stats'">
+        <div class="page-header">
+          <div class="page-title">轮询统计</div>
+          <div class="actions">
+            <button class="btn" :disabled="loading" @click="loadStatus">刷新</button>
+            <span v-if="statsActive" style="font-size:12px;color:var(--text-secondary)">自动刷新中</span>
+          </div>
+        </div>
+        <div v-if="statusData.account_stats" class="table-wrap">
+          <div class="table-header">
+            <div style="width:60px">#</div>
+            <div style="width:100px">状态</div>
+            <div style="width:100px">使用次数</div>
+            <div style="flex:1">最近模型</div>
+            <div style="width:160px">最近使用</div>
+          </div>
+          <div v-for="(st, idx) in statusData.account_stats.accounts" :key="idx" class="table-row">
+            <div style="width:60px">{{ idx + 1 }}</div>
+            <div style="width:100px">
+              <span v-if="st.busy" class="tag tag-warning">● 处理中</span>
+              <span v-else-if="st.use_count > 0" class="tag tag-success">空闲</span>
+              <span v-else class="tag" style="background:#f5f5f5;border-color:#d9d9d9;color:var(--text-secondary)">未使用</span>
+            </div>
+            <div style="width:100px">{{ st.use_count }}</div>
+            <div style="flex:1;font-family:monospace;font-size:12px">{{ st.last_model || '-' }}</div>
+            <div style="width:160px;font-size:12px;color:var(--text-secondary)">
+              <span v-if="st.last_used_at">{{ new Date(st.last_used_at * 1000).toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'}) }}</span>
+              <span v-else>-</span>
+            </div>
+          </div>
+        </div>
+        <div v-else style="padding:40px;text-align:center;color:var(--text-secondary)">暂无轮询数据，请先启动服务</div>
+      </div>
+
       <!-- Test -->
       <div v-if="page==='test'">
         <div class="page-header">
@@ -1066,9 +1110,9 @@ const app = createApp({
           </div>
           <div v-if="testLoading" style="color:var(--text-secondary)">AI 思考中...</div>
         </div>
-        <div style="display:flex;gap:8px">
-          <input v-model="testInput" class="input" placeholder="输入测试消息..." @keyup.enter="sendTest" />
-          <button class="btn primary" :disabled="testLoading" @click="sendTest" style="flex-shrink:0">
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <textarea v-model="testInput" class="input" placeholder="输入测试消息..." @keyup.enter.exact.prevent="sendTest" rows="3" style="flex:1;resize:vertical;min-height:42px"></textarea>
+          <button class="btn primary" :disabled="testLoading" @click="sendTest" style="flex-shrink:0;height:42px">
             <span v-if="testLoading" class="spinner"></span>
             <span v-else>发送</span>
           </button>
