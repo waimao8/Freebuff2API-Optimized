@@ -566,9 +566,31 @@ const app = createApp({
     }
 
     function quickCopyKey(keyText) {
-      navigator.clipboard.writeText(keyText).then(() => {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(keyText).then(() => {
+          showToast('已复制到剪贴板', 'success');
+        }).catch(() => {
+          fallbackCopy(keyText);
+        });
+      } else {
+        fallbackCopy(keyText);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
         showToast('已复制到剪贴板', 'success');
-      }).catch(() => {});
+      } catch (e) {
+        showToast('复制失败，请手动复制', 'error');
+      }
+      document.body.removeChild(ta);
     }
 
     async function toggleApiKey(keyId, currentEnabled) {
