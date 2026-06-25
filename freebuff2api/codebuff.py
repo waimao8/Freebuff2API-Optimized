@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -29,9 +29,20 @@ CHAT_COMPLETIONS_USER_AGENT = (
 
 
 class CodebuffError(RuntimeError):
-    def __init__(self, message: str, status_code: int = 502) -> None:
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 502,
+        *,
+        is_rate_limit: bool = False,
+        reset_at: str | None = None,
+        retry_after_ms: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.is_rate_limit = is_rate_limit
+        self.reset_at = reset_at
+        self.retry_after_ms = retry_after_ms
 
 
 @dataclass
@@ -71,6 +82,12 @@ class FreebuffSessionLease:
             return
         self._closed = True
         self._lock.release()
+
+
+@dataclass
+class RateLimitState:
+    blocked_models: dict[str, float] = field(default_factory=dict)
+    last_error_at: float | None = None
 
 
 class CodebuffClient:
@@ -684,6 +701,7 @@ class CodebuffAccount:
     client: CodebuffClient
     sessions: SessionManager
     busy: bool = False
+    rate_limit: RateLimitState = field(default_factory=RateLimitState)
 
 
 @dataclass
@@ -701,6 +719,9 @@ class CodebuffAccountLease:
         self._closed = True
         await self._session_lease.aclose()
         await self._pool.release(self._account_index)
+
+    def mark_rate_limited(self, model: str, reset_at: str | None) -> None:
+        self._pool.mark_rate_limited(self._account_index, model, reset_at)
 
 
 class CodebuffAccountPool:
@@ -763,7 +784,7 @@ class CodebuffAccountPool:
         model: str,
         messages: list[dict[str, Any]] | None = None,
     ) -> CodebuffAccountLease:
-        account_index = await self._reserve_account()
+        account_index = await self._reserve_account(model)
         account = self._accounts[account_index]
         try:
             session_lease = await account.sessions.acquire_session(model, messages)
@@ -800,22 +821,51 @@ class CodebuffAccountPool:
         logger.info("account pool released account_index=%s", account_index)
         await self._write_stats()
 
-    async def _reserve_account(self) -> int:
+    def mark_rate_limited(
+        self,
+        account_index: int,
+        model: str,
+        reset_at: str | None,
+    ) -> None:
+        if not reset_at:
+            blocked_until = time.time() + 3600
+        else:
+            try:
+                dt = datetime.fromisoformat(reset_at.replace("Z", "+00:00"))
+                blocked_until = dt.timestamp()
+            except Exception:
+                blocked_until = time.time() + 3600
+        self._accounts[account_index].rate_limit.blocked_models[model] = blocked_until
+        self._accounts[account_index].rate_limit.last_error_at = time.time()
+        logger.warning(
+            "account %s rate limited for model=%s until %s",
+            account_index,
+            model,
+            reset_at,
+        )
+
+    async def _reserve_account(self, model: str) -> int:
         async with self._condition:
             while True:
-                account_index = self._next_available_index()
+                account_index = self._next_available_index(model)
                 if account_index is not None:
                     self._accounts[account_index].busy = True
                     self._next_index = (account_index + 1) % len(self._accounts)
                     return account_index
                 await self._condition.wait()
 
-    def _next_available_index(self) -> int | None:
+    def _next_available_index(self, model: str) -> int | None:
         account_count = len(self._accounts)
+        now = time.time()
         for offset in range(account_count):
             account_index = (self._next_index + offset) % account_count
-            if not self._accounts[account_index].busy:
-                return account_index
+            account = self._accounts[account_index]
+            if account.busy:
+                continue
+            blocked_until = account.rate_limit.blocked_models.get(model)
+            if blocked_until and now < blocked_until:
+                continue
+            return account_index
         return None
 
 
@@ -879,6 +929,27 @@ def _upstream_error(
                 f"{upstream_message} 当前 IP/区域受限；请换用 US 服务器或 US 出口 IP 后重试。",
                 409,
             )
+
+    if response.status_code == 429:
+        try:
+            data = (
+                response.json()
+                if body is None
+                else httpx.Response(
+                    response.status_code,
+                    content=body,
+                    headers=response.headers,
+                ).json()
+            )
+        except ValueError:
+            data = {}
+        return CodebuffError(
+            f"{prefix}: {response.status_code} {text}",
+            502,
+            is_rate_limit=True,
+            reset_at=data.get("resetAt"),
+            retry_after_ms=data.get("retryAfterMs"),
+        )
 
     return CodebuffError(
         f"{prefix}: {response.status_code} {text}",

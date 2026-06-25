@@ -69,7 +69,7 @@ class StreamingTests(unittest.IsolatedAsyncioTestCase):
             agent_id="base2-free-deepseek-flash",
             started_at="2026-05-23T00:00:00.000Z",
         )
-        async for chunk in _stream_openai_chunks(request, {}, run):
+        async for chunk in _stream_openai_chunks(request, {}, run, "test-model"):
             chunks.append(chunk.decode("utf-8"))
 
         first_payload = json.loads(chunks[0].removeprefix("data: ").strip())
@@ -174,7 +174,7 @@ class StreamingTests(unittest.IsolatedAsyncioTestCase):
             started_at="2026-05-23T00:00:00.000Z",
         )
         with self.assertLogs("freebuff2api.app", level="WARNING"):
-            async for chunk in _stream_openai_chunks(request, {}, run):
+            async for chunk in _stream_openai_chunks(request, {}, run, "test-model"):
                 chunks.append(chunk.decode("utf-8"))
 
         error_payload = json.loads(chunks[0].removeprefix("data: ").strip())

@@ -207,5 +207,76 @@ class SessionManagerTests(unittest.IsolatedAsyncioTestCase):
                 await pool.aclose()
 
 
+class RateLimitFailoverTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rate_limited_account_is_skipped(self) -> None:
+        settings = Settings(
+            codebuff_token="token-a,token-b",
+            local_api_key=None,
+        )
+        with patch("freebuff2api.codebuff.CodebuffClient", PoolClient):
+            pool = CodebuffAccountPool(settings)
+            try:
+                # block token-a for a specific model
+                pool.mark_rate_limited(0, "deepseek/deepseek-v4-pro", "2099-01-01T00:00:00Z")
+
+                # next reserve should skip index 0 and pick index 1
+                idx = pool._next_available_index("deepseek/deepseek-v4-pro")
+                self.assertEqual(idx, 1)
+
+                # a different model should still be able to use index 0
+                idx2 = pool._next_available_index("google/gemini-2.5-flash-lite")
+                self.assertEqual(idx2, 0)
+            finally:
+                await pool.aclose()
+
+    async def test_rate_limited_model_does_not_block_other_models(self) -> None:
+        settings = Settings(
+            codebuff_token="token-a,token-b",
+            local_api_key=None,
+        )
+        with patch("freebuff2api.codebuff.CodebuffClient", PoolClient):
+            pool = CodebuffAccountPool(settings)
+            try:
+                pool.mark_rate_limited(0, "deepseek/deepseek-v4-pro", "2099-01-01T00:00:00Z")
+
+                # index 0 is blocked for v4-pro but free for flash
+                idx = pool._next_available_index("deepseek/deepseek-v4-flash")
+                self.assertEqual(idx, 0)
+            finally:
+                await pool.aclose()
+
+    async def test_all_accounts_rate_limited_returns_none(self) -> None:
+        settings = Settings(
+            codebuff_token="token-a,token-b",
+            local_api_key=None,
+        )
+        with patch("freebuff2api.codebuff.CodebuffClient", PoolClient):
+            pool = CodebuffAccountPool(settings)
+            try:
+                pool.mark_rate_limited(0, "deepseek/deepseek-v4-pro", "2099-01-01T00:00:00Z")
+                pool.mark_rate_limited(1, "deepseek/deepseek-v4-pro", "2099-01-01T00:00:00Z")
+
+                idx = pool._next_available_index("deepseek/deepseek-v4-pro")
+                self.assertIsNone(idx)
+            finally:
+                await pool.aclose()
+
+    async def test_rate_limit_expires_and_account_becomes_available(self) -> None:
+        settings = Settings(
+            codebuff_token="token-a",
+            local_api_key=None,
+        )
+        with patch("freebuff2api.codebuff.CodebuffClient", PoolClient):
+            pool = CodebuffAccountPool(settings)
+            try:
+                # block with a resetAt in the past
+                pool.mark_rate_limited(0, "deepseek/deepseek-v4-pro", "2000-01-01T00:00:00Z")
+
+                idx = pool._next_available_index("deepseek/deepseek-v4-pro")
+                self.assertEqual(idx, 0)
+            finally:
+                await pool.aclose()
+
+
 if __name__ == "__main__":
     unittest.main()
