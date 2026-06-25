@@ -37,12 +37,14 @@ class CodebuffError(RuntimeError):
         is_rate_limit: bool = False,
         reset_at: str | None = None,
         retry_after_ms: int | None = None,
+        is_session_error: bool = False,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.is_rate_limit = is_rate_limit
         self.reset_at = reset_at
         self.retry_after_ms = retry_after_ms
+        self.is_session_error = is_session_error
 
 
 @dataclass
@@ -76,6 +78,10 @@ class FreebuffSessionLease:
     session: FreebuffSession
     _lock: asyncio.Lock
     _closed: bool = False
+
+    @property
+    def sessions(self):
+        return self._pool._accounts[self._account_index].sessions
 
     async def aclose(self) -> None:
         if self._closed:
@@ -674,6 +680,39 @@ class SessionManager:
         self._sessions.clear()
         return None
 
+    async def invalidate_session(
+        self, model: str, *, reason: str = "chat_failure"
+    ) -> None:
+        """Drop a cached session so the next request re-creates upstream.
+
+        Called when chat fails with session_model_mismatch / session_superseded /
+        session_expired so we don't keep returning a stale cached session.
+        Also deletes the upstream session so get_session() won't re-adopt it,
+        which would cause an infinite 409/410 loop.
+        """
+        popped = self._sessions.pop(model, None)
+        if popped is not None:
+            logger.info(
+                "invalidated cached freebuff session model=%s instance_id=%s reason=%s",
+                model,
+                popped.instance_id,
+                reason,
+            )
+        try:
+            await self.client.delete_session()
+            logger.info(
+                "deleted upstream freebuff session after invalidation model=%s reason=%s",
+                model,
+                reason,
+            )
+        except Exception:
+            logger.debug(
+                "could not delete upstream session (may already be dead) model=%s reason=%s",
+                model,
+                reason,
+                exc_info=True,
+            )
+
 
 @dataclass
 class CodebuffAccount:
@@ -691,6 +730,10 @@ class CodebuffAccountLease:
     _pool: CodebuffAccountPool
     _account_index: int
     _closed: bool = False
+
+    @property
+    def sessions(self):
+        return self._pool._accounts[self._account_index].sessions
 
     async def aclose(self) -> None:
         if self._closed:
@@ -907,6 +950,33 @@ def _upstream_error(
                 "Codebuff 409 session_model_mismatch: "
                 f"{upstream_message} 当前 IP/区域受限；请换用 US 服务器或 US 出口 IP 后重试。",
                 409,
+                is_session_error=True,
+            )
+        if data.get("error") == "session_superseded":
+            return CodebuffError(
+                f"Codebuff 409 session_superseded: {data.get('message') or text}",
+                409,
+                is_session_error=True,
+            )
+
+    if response.status_code == 410:
+        try:
+            data = (
+                response.json()
+                if body is None
+                else httpx.Response(
+                    response.status_code,
+                    content=body,
+                    headers=response.headers,
+                ).json()
+            )
+        except ValueError:
+            data = {}
+        if data.get("error") == "session_expired":
+            return CodebuffError(
+                f"Codebuff 410 session_expired: {data.get('message') or text}",
+                410,
+                is_session_error=True,
             )
 
     if response.status_code == 429:

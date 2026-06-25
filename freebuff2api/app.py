@@ -206,6 +206,25 @@ async def chat_completions(request: Request) -> Any:
             return JSONResponse(response)
 
         except CodebuffError as error:
+            if lease is not None:
+                await lease.aclose()
+            if error.is_session_error:
+                logger.warning(
+                    "session error on attempt %s/%s: %s",
+                    attempt + 1,
+                    MAX_CHAT_RETRIES + 1,
+                    error,
+                )
+                if lease is not None:
+                    try:
+                        await lease.sessions.invalidate_session(
+                            model_config.session_id,
+                            reason="session_error_retry",
+                        )
+                    except Exception:
+                        pass
+                last_error = error
+                continue
             if error.is_rate_limit and attempt < MAX_CHAT_RETRIES:
                 if lease is not None:
                     lease.mark_rate_limited(model, error.reset_at)
@@ -215,8 +234,6 @@ async def chat_completions(request: Request) -> Any:
                     MAX_CHAT_RETRIES,
                     error,
                 )
-            if lease is not None:
-                await lease.aclose()
             last_error = error
             if error.is_rate_limit and attempt < MAX_CHAT_RETRIES:
                 continue
