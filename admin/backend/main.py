@@ -422,7 +422,7 @@ async def test_chat(request: Request) -> dict[str, Any]:
         headers["Authorization"] = f"Bearer {api_key}"
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(url, json={**body, "stream": False}, headers=headers)
             if resp.status_code >= 400:
                 return {"error": f"HTTP {resp.status_code}: {resp.text[:500]}"}
