@@ -95,6 +95,7 @@ class CodebuffClient:
         self.settings = settings
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(settings.request_timeout, read=300.0),
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
             follow_redirects=True,
             proxy=settings.upstream_proxy_url,
             trust_env=False,
@@ -553,35 +554,13 @@ class SessionManager:
     ) -> FreebuffSession:
         cached = self._sessions.get(model)
         if cached and cached.is_fresh:
-            try:
-                data = await self.client.get_session(cached.instance_id)
-                if data.get("status") == "active" and data.get("model") in {
-                    None,
-                    model,
-                }:
-                    cached.remaining_ms = data.get("remainingMs")
-                    logger.debug(
-                        "reuse freebuff session model=%s instance_id=%s remaining_ms=%s",
-                        model,
-                        cached.instance_id,
-                        cached.remaining_ms,
-                    )
-                    return cached
-                if data.get("status") == "active":
-                    logger.info(
-                        "cached freebuff session model mismatch cached=%s upstream=%s",
-                        model,
-                        data.get("model"),
-                    )
-                    self._sessions.pop(model, None)
-            except CodebuffError:
-                logger.debug(
-                    "cached freebuff session invalid model=%s instance_id=%s",
-                    model,
-                    cached.instance_id,
-                    exc_info=self.settings.debug,
-                )
-                self._sessions.pop(model, None)
+            logger.info(
+                "optimistic reuse freebuff session model=%s instance_id=%s remaining_ms=%s",
+                model,
+                cached.instance_id,
+                cached.remaining_ms,
+            )
+            return cached
 
         active_session = await self._delete_locked_session(model)
         if active_session:
